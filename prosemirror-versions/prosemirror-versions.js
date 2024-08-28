@@ -1,8 +1,7 @@
 /* eslint-env browser */
 
 import * as Y from 'yjs'
-import { WebsocketProvider } from 'y-websocket'
-import { ySyncPlugin, ySyncPluginKey, yCursorPlugin, yUndoPlugin, undo, redo } from 'y-prosemirror'
+import { ySyncPlugin, ySyncPluginKey, yUndoPlugin, undo, redo } from 'y-prosemirror'
 import { EditorState } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 import { schema } from './schema.js'
@@ -41,22 +40,8 @@ const addVersion = doc => {
   }
 }
 
-const liveTracking = /** @type {HTMLInputElement} */ (dom.element('input', [
-  pair.create('type', 'checkbox'),
-  pair.create('name', 'yjs-live-tracking'),
-  pair.create('value', 'Live Tracking ')
-]))
-
-const updateLiveTrackingState = editorstate => {
-  setTimeout(() => {
-    const syncState = ySyncPluginKey.getState(editorstate.state)
-    liveTracking.checked = syncState.prevSnapshot != null && syncState.snapshot == null
-  }, 500)
-}
-
 const renderVersion = (editorview, version, prevSnapshot) => {
   editorview.dispatch(editorview.state.tr.setMeta(ySyncPluginKey, { snapshot: Y.decodeSnapshot(version.snapshot), prevSnapshot: prevSnapshot == null ? Y.emptySnapshot : Y.decodeSnapshot(prevSnapshot) }))
-  updateLiveTrackingState(editorview)
 }
 
 const unrenderVersion = editorview => {
@@ -64,7 +49,6 @@ const unrenderVersion = editorview => {
   if (binding != null) {
     binding.unrenderSnapshot()
   }
-  updateLiveTrackingState(editorview)
 }
 
 /**
@@ -93,22 +77,6 @@ export const attachVersion = (parent, doc, editorview) => {
   const rerender = () => {
     render(html`<div class="version-modal" ?hidden=${open}>${snapshotButton(doc)}${versionList(editorview, doc)}</div>`, vContainer)
   }
-  updateLiveTrackingState(editorview)
-  liveTracking.addEventListener('click', () => {
-    if (liveTracking.checked) {
-      const versions = doc.getArray('versions')
-      const lastVersion = versions.length > 0 ? Y.decodeSnapshot(versions.get(versions.length - 1).snapshot) : Y.emptySnapshot
-      editorview.dispatch(editorview.state.tr.setMeta(ySyncPluginKey, { snapshot: null, prevSnapshot: lastVersion }))
-    } else {
-      unrenderVersion(editorview)
-    }
-  })
-  parent.insertBefore(liveTracking, null)
-  parent.insertBefore(dom.element('label', [
-    pair.create('for', 'yjs-live-tracking')
-  ], [
-    dom.text('Live Tracking ')
-  ]), null)
   const btn = document.createElement('button')
   btn.setAttribute('type', 'button')
   btn.textContent = 'Versions'
@@ -143,12 +111,6 @@ window.addEventListener('load', () => {
   const permanentUserData = new Y.PermanentUserData(ydoc)
   permanentUserData.setUserMapping(ydoc, ydoc.clientID, user.username)
   ydoc.gc = false
-  const provider = new WebsocketProvider(
-    'wss://demos.yjs.dev/ws', // use the public ws server
-    // `ws${location.protocol.slice(4)}//${location.host}/ws`, // alternatively: use the local ws server (run `npm start` in root directory)
-    'prosemirror-versions-demo-2024/06',
-    ydoc
-  )
   const yXmlFragment = ydoc.get('prosemirror', Y.XmlFragment)
 
   const editor = document.createElement('div')
@@ -160,7 +122,6 @@ window.addEventListener('load', () => {
       schema,
       plugins: [
         ySyncPlugin(yXmlFragment, { permanentUserData, colors }),
-        yCursorPlugin(provider.awareness),
         yUndoPlugin(),
         keymap({
           'Mod-z': undo,
@@ -174,17 +135,6 @@ window.addEventListener('load', () => {
 
   attachVersion(document.getElementById('y-version'), ydoc, prosemirrorView)
 
-  const connectBtn = document.getElementById('y-connect-btn')
-  connectBtn.addEventListener('click', () => {
-    if (provider.shouldConnect) {
-      provider.disconnect()
-      connectBtn.textContent = 'Connect'
-    } else {
-      provider.connect()
-      connectBtn.textContent = 'Disconnect'
-    }
-  })
-
   // @ts-ignore
-  window.example = { provider, ydoc, yXmlFragment, prosemirrorView }
+  window.example = { ydoc, yXmlFragment, prosemirrorView }
 })
